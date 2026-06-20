@@ -106,9 +106,7 @@
         <div class="stat-label">Open tabs</div>
       </div>
     </div>
-    <div class="last-refresh">
-      <span style="color: var(--muted); font-size: 11px;"><a href="https://github.com/zarazhangrui/tab-out" target="_top" style="color: var(--muted); text-decoration: underline; text-underline-offset: 2px;">Tab Out</a> by <a href="https://x.com/zarazhangrui" target="_top" style="color: var(--muted); text-decoration: underline; text-underline-offset: 2px;">Zara</a></span>
-    </div>
+
   </footer>
 
 </div><!-- end .container -->
@@ -124,6 +122,102 @@
   </svg>
   <span id="toastText"></span>
 </div>
+
+<!-- ================================================================
+     TEMPLATES — cloned by app.js instead of building HTML strings.
+     Parsed once by the browser, then cloned via cloneNode(true) —
+     avoids innerHTML performance + security warnings.
+     ================================================================ -->
+
+<template id="tmpl-page-chip">
+  <div class="page-chip clickable" data-action="focus-tab">
+    <img class="chip-favicon" src="" alt="" onerror="this.style.display='none'">
+    <span class="chip-text"></span>
+    <span class="chip-dupe-badge"></span>
+    <div class="chip-actions">
+      <button class="chip-action chip-save" data-action="defer-single-tab" title="Save for later">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
+      </button>
+      <button class="chip-action chip-close" data-action="close-single-tab" title="Close this tab">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+<template id="tmpl-overflow-chip">
+  <div class="page-chip page-chip-overflow clickable" data-action="expand-chips">
+    <span class="chip-text"></span>
+  </div>
+</template>
+
+<template id="tmpl-overflow-container">
+  <div class="page-chips-overflow" style="display:none"></div>
+</template>
+
+<template id="tmpl-domain-card">
+  <div class="mission-card domain-card has-neutral-bar">
+    <div class="status-bar"></div>
+    <div class="mission-content">
+      <div class="mission-top">
+        <span class="mission-name"></span>
+        <span class="open-tabs-badge">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.25V18a2.25 2.25 0 0 0 2.25 2.25h13.5A2.25 2.25 0 0 0 21 18V8.25m-18 0V6a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 6v2.25m-18 0h18" /></svg>
+          <span class="tab-badge-count"></span>
+        </span>
+        <span class="dupe-badge" style="display:none"></span>
+      </div>
+      <div class="mission-pages"></div>
+      <div class="actions">
+        <button class="action-btn close-tabs" data-action="close-domain-tabs">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          <span class="close-all-text"></span>
+        </button>
+        <button class="action-btn dedup-btn" data-action="dedup-keep-one" style="display:none"></button>
+      </div>
+    </div>
+    <div class="mission-meta">
+      <div class="mission-page-count"></div>
+      <div class="mission-page-label">tabs</div>
+    </div>
+  </div>
+</template>
+
+<template id="tmpl-deferred-item">
+  <div class="deferred-item">
+    <input type="checkbox" class="deferred-checkbox" data-action="check-deferred">
+    <div class="deferred-info">
+      <a class="deferred-title" target="_blank" rel="noopener">
+        <img class="deferred-favicon" src="" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" onerror="this.style.display='none'">
+        <span class="deferred-title-text"></span>
+      </a>
+      <div class="deferred-meta">
+        <span class="deferred-domain"></span>
+        <span class="deferred-time"></span>
+      </div>
+    </div>
+    <button class="deferred-dismiss" data-action="dismiss-deferred" title="Dismiss">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+    </button>
+  </div>
+</template>
+
+<template id="tmpl-archive-item">
+  <div class="archive-item">
+    <a class="archive-item-title" target="_blank" rel="noopener"></a>
+    <span class="archive-item-date"></span>
+  </div>
+</template>
+
+<template id="tmpl-empty-state">
+  <div class="missions-empty-state">
+    <div class="empty-checkmark">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+    </div>
+    <div class="empty-title">Inbox zero, but for tabs.</div>
+    <div class="empty-subtitle">You're free.</div>
+  </div>
+</template>
 
 <!-- Personal config (gitignored) — defines LOCAL_LANDING_PAGE_PATTERNS etc. -->
 <!-- If the file doesn't exist, that's fine — app.js uses sensible defaults. -->

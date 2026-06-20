@@ -4,5 +4,9 @@ node_modules/
 .DS_Store
 docs/superpowers/
 
+# Generated packages — not part of source
+tab-out-firefox.zip
+tab-out-firefox.tar.gz
+
 # Personal config (landing page patterns, etc.) — never push to GitHub
 extension/config.local.js

@@ -578,17 +578,9 @@ function checkAndShowEmptyState() {
   const remaining = missionsEl.querySelectorAll('.mission-card:not(.closing)').length;
   if (remaining > 0) return;
 
-  missionsEl.innerHTML = `
-    <div class="missions-empty-state">
-      <div class="empty-checkmark">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-        </svg>
-      </div>
-      <div class="empty-title">Inbox zero, but for tabs.</div>
-      <div class="empty-subtitle">You're free.</div>
-    </div>
-  `;
+  // Clone the empty state template — no innerHTML
+  const emptyState = createFromTemplate('tmpl-empty-state');
+  missionsEl.appendChild(emptyState);
 
   const countEl = document.getElementById('openTabsSectionCount');
   if (countEl) countEl.textContent = '0 domains';
@@ -817,14 +809,44 @@ function smartTitle(title, url) {
 
 
 /* ----------------------------------------------------------------
-   SVG ICON STRINGS
+   TEMPLATE CLONING HELPER
+
+   Clones an HTML <template> element and returns the root node.
+   Templates are parsed once by the browser (at page load), so
+   cloning avoids innerHTML's string parsing on every render.
    ---------------------------------------------------------------- */
-const ICONS = {
-  tabs:    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.25V18a2.25 2.25 0 0 0 2.25 2.25h13.5A2.25 2.25 0 0 0 21 18V8.25m-18 0V6a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 6v2.25m-18 0h18" /></svg>`,
-  close:   `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>`,
-  archive: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>`,
-  focus:   `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" /></svg>`,
-};
+
+function createFromTemplate(id) {
+  const tpl = document.getElementById(id);
+  if (!tpl) {
+    console.warn('[tab-out] Template not found:', id);
+    return null;
+  }
+  return tpl.content.firstElementChild.cloneNode(true);
+}
+
+/**
+ * createCloseIcon()
+ *
+ * Builds an SVG close icon element via DOM (no innerHTML).
+ */
+function createCloseIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.style.cssText = 'width:12px;height:12px;';
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('d', 'M6 18 18 6M6 6l12 12');
+  svg.appendChild(path);
+  return svg;
+}
+
+
 
 
 /* ----------------------------------------------------------------
@@ -881,48 +903,114 @@ function checkTabOutDupes() {
    OVERFLOW CHIPS ("+N more" expand button in domain cards)
    ---------------------------------------------------------------- */
 
-function buildOverflowChips(hiddenTabs, urlCounts = {}) {
-  const hiddenChips = hiddenTabs.map(tab => {
-    const label    = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), '');
-    const count    = urlCounts[tab.url] || 1;
-    const dupeTag  = count > 1 ? ` <span class="chip-dupe-badge">(${count}x)</span>` : '';
-    const chipClass = count > 1 ? ' chip-has-dupes' : '';
-    const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
-    const safeTitle = label.replace(/"/g, '&quot;');
-    let domain = '';
-    try { domain = new URL(tab.url).hostname; } catch {}
-    const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
-      ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
-      <span class="chip-text">${label}</span>${dupeTag}
-      <div class="chip-actions">
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
-        </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+/* ----------------------------------------------------------------
+   CHIP CREATOR (from template)
+   ---------------------------------------------------------------- */
 
-  return `
-    <div class="page-chips-overflow" style="display:none">${hiddenChips}</div>
-    <div class="page-chip page-chip-overflow clickable" data-action="expand-chips">
-      <span class="chip-text">+${hiddenTabs.length} more</span>
-    </div>`;
+/**
+ * createChip(tab, groupDomain)
+ *
+ * Clones the chip template and fills in tab data.
+ * Returns a DOM element (the chip).
+ */
+function createChip(tab, groupDomain) {
+  let label = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), groupDomain || '');
+  try {
+    const parsed = new URL(tab.url);
+    if (parsed.hostname === 'localhost' && parsed.port) label = `${parsed.port} ${label}`;
+  } catch {}
+
+  const safeUrl   = tab.url || '';
+  const safeTitle = label;
+  const chip = createFromTemplate('tmpl-page-chip');
+
+  // Set dynamic attributes
+  chip.setAttribute('data-tab-url', safeUrl);
+  chip.title = safeTitle;
+
+  // Favicon
+  let domain = '';
+  try { domain = new URL(tab.url).hostname; } catch {}
+  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
+  const faviconImg = chip.querySelector('.chip-favicon');
+  if (faviconUrl) {
+    faviconImg.src = faviconUrl;
+  } else {
+    faviconImg.style.display = 'none';
+  }
+
+  // Text
+  chip.querySelector('.chip-text').textContent = label;
+
+  // Buttons
+  const saveBtn = chip.querySelector('.chip-save');
+  saveBtn.setAttribute('data-tab-url', safeUrl);
+  saveBtn.setAttribute('data-tab-title', safeTitle);
+
+  const closeBtn = chip.querySelector('.chip-close');
+  closeBtn.setAttribute('data-tab-url', safeUrl);
+
+  return chip;
+}
+
+/**
+ * markDupeChip(chip, count)
+ *
+ * Adds dupe styling and badge to a chip element.
+ */
+function markDupeChip(chip, count) {
+  const dupeBadge = chip.querySelector('.chip-dupe-badge');
+  if (dupeBadge) {
+    dupeBadge.textContent = `(${count}x)`;
+    dupeBadge.style.display = 'inline';
+  }
+  chip.classList.add('chip-has-dupes');
 }
 
 
 /* ----------------------------------------------------------------
-   DOMAIN CARD RENDERER
+   OVERFLOW CHIPS
    ---------------------------------------------------------------- */
 
 /**
- * renderDomainCard(group, groupIndex)
+ * buildOverflowChips(hiddenTabs, urlCounts)
  *
- * Builds the HTML for one domain group card.
- * group = { domain: string, tabs: [{ url, title, id, windowId, active }] }
+ * Creates hidden overflow chips and a "+N more" indicator.
+ * Returns a DocumentFragment containing both.
+ */
+function buildOverflowChips(hiddenTabs, urlCounts = {}) {
+  const frag = document.createDocumentFragment();
+
+  // Overflow container (hidden by default)
+  const container = createFromTemplate('tmpl-overflow-container');
+
+  for (const tab of hiddenTabs) {
+    const chip = createChip(tab, '');
+    const count = urlCounts[tab.url] || 1;
+    if (count > 1) markDupeChip(chip, count);
+    container.appendChild(chip);
+  }
+
+  frag.appendChild(container);
+
+  // "+N more" indicator
+  const moreChip = createFromTemplate('tmpl-overflow-chip');
+  moreChip.querySelector('.chip-text').textContent = `+${hiddenTabs.length} more`;
+  frag.appendChild(moreChip);
+
+  return frag;
+}
+
+
+/* ----------------------------------------------------------------
+   DOMAIN CARD RENDERER (from template)
+   ---------------------------------------------------------------- */
+
+/**
+ * renderDomainCard(group)
+ *
+ * Clones the domain card template, fills in group data and chips.
+ * Returns a DOM element (the card).
  */
 function renderDomainCard(group) {
   const tabs      = group.tabs || [];
@@ -930,25 +1018,14 @@ function renderDomainCard(group) {
   const isLanding = group.domain === '__landing-pages__';
   const stableId  = 'domain-' + group.domain.replace(/[^a-z0-9]/g, '-');
 
-  // Count duplicates (exact URL match)
+  // Count duplicates
   const urlCounts = {};
   for (const tab of tabs) urlCounts[tab.url] = (urlCounts[tab.url] || 0) + 1;
   const dupeUrls   = Object.entries(urlCounts).filter(([, c]) => c > 1);
   const hasDupes   = dupeUrls.length > 0;
   const totalExtras = dupeUrls.reduce((s, [, c]) => s + c - 1, 0);
 
-  const tabBadge = `<span class="open-tabs-badge">
-    ${ICONS.tabs}
-    ${tabCount} tab${tabCount !== 1 ? 's' : ''} open
-  </span>`;
-
-  const dupeBadge = hasDupes
-    ? `<span class="open-tabs-badge" style="color:var(--accent-amber);background:rgba(200,113,58,0.08);">
-        ${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}
-      </span>`
-    : '';
-
-  // Deduplicate for display: show each URL once, with (Nx) badge if duped
+  // Deduplicate for display
   const seen = new Set();
   const uniqueTabs = [];
   for (const tab of tabs) {
@@ -958,66 +1035,71 @@ function renderDomainCard(group) {
   const visibleTabs = uniqueTabs.slice(0, 8);
   const extraCount  = uniqueTabs.length - visibleTabs.length;
 
-  const pageChips = visibleTabs.map(tab => {
-    let label = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), group.domain);
-    // For localhost tabs, prepend port number so you can tell projects apart
-    try {
-      const parsed = new URL(tab.url);
-      if (parsed.hostname === 'localhost' && parsed.port) label = `${parsed.port} ${label}`;
-    } catch {}
-    const count    = urlCounts[tab.url];
-    const dupeTag  = count > 1 ? ` <span class="chip-dupe-badge">(${count}x)</span>` : '';
-    const chipClass = count > 1 ? ' chip-has-dupes' : '';
-    const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
-    const safeTitle = label.replace(/"/g, '&quot;');
-    let domain = '';
-    try { domain = new URL(tab.url).hostname; } catch {}
-    const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
-      ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
-      <span class="chip-text">${label}</span>${dupeTag}
-      <div class="chip-actions">
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
-        </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-        </button>
-      </div>
-    </div>`;
-  }).join('') + (extraCount > 0 ? buildOverflowChips(uniqueTabs.slice(8), urlCounts) : '');
-
-  let actionsHtml = `
-    <button class="action-btn close-tabs" data-action="close-domain-tabs" data-domain-id="${stableId}">
-      ${ICONS.close}
-      Close all ${tabCount} tab${tabCount !== 1 ? 's' : ''}
-    </button>`;
-
+  // Clone the card template
+  const card = createFromTemplate('tmpl-domain-card');
+  card.setAttribute('data-domain-id', stableId);
   if (hasDupes) {
-    const dupeUrlsEncoded = dupeUrls.map(([url]) => encodeURIComponent(url)).join(',');
-    actionsHtml += `
-      <button class="action-btn" data-action="dedup-keep-one" data-dupe-urls="${dupeUrlsEncoded}">
-        Close ${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}
-      </button>`;
+    card.classList.remove('has-neutral-bar');
+    card.classList.add('has-amber-bar');
   }
 
-  return `
-    <div class="mission-card domain-card ${hasDupes ? 'has-amber-bar' : 'has-neutral-bar'}" data-domain-id="${stableId}">
-      <div class="status-bar"></div>
-      <div class="mission-content">
-        <div class="mission-top">
-          <span class="mission-name">${isLanding ? 'Homepages' : (group.label || friendlyDomain(group.domain))}</span>
-          ${tabBadge}
-          ${dupeBadge}
-        </div>
-        <div class="mission-pages">${pageChips}</div>
-        <div class="actions">${actionsHtml}</div>
-      </div>
-      <div class="mission-meta">
-        <div class="mission-page-count">${tabCount}</div>
-        <div class="mission-page-label">tabs</div>
-      </div>
-    </div>`;
+  // Domain name
+  card.querySelector('.mission-name').textContent =
+    isLanding ? 'Homepages' : (group.label || friendlyDomain(group.domain));
+
+  // Tab count badge
+  card.querySelector('.tab-badge-count').textContent =
+    `${tabCount} tab${tabCount !== 1 ? 's' : ''} open`;
+
+  // Dupe badge
+  if (hasDupes) {
+    const dupeBadge = card.querySelector('.dupe-badge');
+    dupeBadge.textContent = `${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}`;
+    dupeBadge.style.display = 'inline';
+    dupeBadge.style.cssText += ';color:var(--accent-amber);background:rgba(200,113,58,0.08);';
+    dupeBadge.classList.add('open-tabs-badge');
+  }
+
+  // Page count (mission-meta)
+  card.querySelector('.mission-page-count').textContent = String(tabCount);
+
+  // Build and append chips
+  const pagesEl = card.querySelector('.mission-pages');
+  const frag = document.createDocumentFragment();
+
+  for (const tab of visibleTabs) {
+    const chip = createChip(tab, group.domain);
+    const count = urlCounts[tab.url];
+    if (count > 1) markDupeChip(chip, count);
+    frag.appendChild(chip);
+  }
+
+  if (extraCount > 0) {
+    const overflowFrag = buildOverflowChips(uniqueTabs.slice(8), urlCounts);
+    // Append overflow children to fragment
+    while (overflowFrag.firstChild) {
+      frag.appendChild(overflowFrag.firstChild);
+    }
+  }
+
+  pagesEl.appendChild(frag);
+
+  // Actions
+  const actionsEl = card.querySelector('.actions');
+  const closeBtn = actionsEl.querySelector('.close-tabs');
+  closeBtn.setAttribute('data-domain-id', stableId);
+  closeBtn.querySelector('.close-all-text').textContent =
+    `Close all ${tabCount} tab${tabCount !== 1 ? 's' : ''}`;
+
+  if (hasDupes) {
+    const dedupBtn = actionsEl.querySelector('.dedup-btn');
+    const dupeUrlsEncoded = dupeUrls.map(([url]) => encodeURIComponent(url)).join(',');
+    dedupBtn.textContent = `Close ${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}`;
+    dedupBtn.setAttribute('data-dupe-urls', dupeUrlsEncoded);
+    dedupBtn.style.display = '';
+  }
+
+  return card;
 }
 
 
@@ -1057,7 +1139,10 @@ async function renderDeferredColumn() {
     // Render active checklist items
     if (active.length > 0) {
       countEl.textContent = `${active.length} item${active.length !== 1 ? 's' : ''}`;
-      list.innerHTML = active.map(item => renderDeferredItem(item)).join('');
+      list.textContent = '';
+      for (const item of active) {
+        list.appendChild(renderDeferredItem(item));
+      }
       list.style.display = 'block';
       empty.style.display = 'none';
     } else {
@@ -1069,7 +1154,10 @@ async function renderDeferredColumn() {
     // Render archive section
     if (archived.length > 0) {
       archiveCountEl.textContent = `(${archived.length})`;
-      archiveList.innerHTML = archived.map(item => renderArchiveItem(item)).join('');
+      archiveList.textContent = '';
+      for (const item of archived) {
+        archiveList.appendChild(renderArchiveItem(item));
+      }
       archiveEl.style.display = 'block';
     } else {
       archiveEl.style.display = 'none';
@@ -1084,47 +1172,62 @@ async function renderDeferredColumn() {
 /**
  * renderDeferredItem(item)
  *
- * Builds HTML for one active checklist item: checkbox, title link,
- * domain, time ago, dismiss button.
+ * Creates one active checklist item (checkbox, title, domain, time, dismiss)
+ * from the template. Returns a DOM element.
  */
 function renderDeferredItem(item) {
+  const el = createFromTemplate('tmpl-deferred-item');
+  el.setAttribute('data-deferred-id', item.id);
+
   let domain = '';
   try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch {}
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
   const ago = timeAgo(item.savedAt);
 
-  return `
-    <div class="deferred-item" data-deferred-id="${item.id}">
-      <input type="checkbox" class="deferred-checkbox" data-action="check-deferred" data-deferred-id="${item.id}">
-      <div class="deferred-info">
-        <a href="${item.url}" target="_blank" rel="noopener" class="deferred-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
-          <img src="${faviconUrl}" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" onerror="this.style.display='none'">${item.title || item.url}
-        </a>
-        <div class="deferred-meta">
-          <span>${domain}</span>
-          <span>${ago}</span>
-        </div>
-      </div>
-      <button class="deferred-dismiss" data-action="dismiss-deferred" data-deferred-id="${item.id}" title="Dismiss">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-      </button>
-    </div>`;
+  // Checkbox
+  el.querySelector('.deferred-checkbox').setAttribute('data-deferred-id', item.id);
+
+  // Title link
+  const link = el.querySelector('.deferred-title');
+  link.href = item.url;
+  link.title = item.title || item.url;
+  link.querySelector('.deferred-title-text').textContent = item.title || item.url;
+
+  // Favicon
+  const favicon = el.querySelector('.deferred-favicon');
+  if (domain) {
+    favicon.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
+  } else {
+    favicon.style.display = 'none';
+  }
+
+  // Meta
+  el.querySelector('.deferred-domain').textContent = domain;
+  el.querySelector('.deferred-time').textContent = ago;
+
+  // Dismiss
+  el.querySelector('.deferred-dismiss').setAttribute('data-deferred-id', item.id);
+
+  return el;
 }
 
 /**
  * renderArchiveItem(item)
  *
- * Builds HTML for one completed/archived item (simpler: just title + date).
+ * Creates one archived item (title + date) from template.
+ * Returns a DOM element.
  */
 function renderArchiveItem(item) {
+  const el = createFromTemplate('tmpl-archive-item');
   const ago = item.completedAt ? timeAgo(item.completedAt) : timeAgo(item.savedAt);
-  return `
-    <div class="archive-item">
-      <a href="${item.url}" target="_blank" rel="noopener" class="archive-item-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
-        ${item.title || item.url}
-      </a>
-      <span class="archive-item-date">${ago}</span>
-    </div>`;
+
+  const link = el.querySelector('.archive-item-title');
+  link.href = item.url;
+  link.title = item.title || item.url;
+  link.textContent = item.title || item.url;
+
+  el.querySelector('.archive-item-date').textContent = ago;
+
+  return el;
 }
 
 
@@ -1274,8 +1377,30 @@ async function renderStaticDashboard() {
 
   if (domainGroups.length > 0 && openTabsSection) {
     if (openTabsSectionTitle) openTabsSectionTitle.textContent = 'Open tabs';
-    openTabsSectionCount.innerHTML = `${domainGroups.length} domain${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
-    openTabsMissionsEl.innerHTML = domainGroups.map(g => renderDomainCard(g)).join('');
+
+    // Build section count with inline button (minimal DOM) — avoids innerHTML
+    openTabsSectionCount.textContent = '';
+    const domainText = document.createTextNode(
+      `${domainGroups.length} domain${domainGroups.length !== 1 ? 's' : ''}  ·  `
+    );
+    openTabsSectionCount.appendChild(domainText);
+
+    const closeAllBtn = document.createElement('button');
+    closeAllBtn.className = 'action-btn close-tabs';
+    closeAllBtn.setAttribute('data-action', 'close-all-open-tabs');
+    closeAllBtn.style.cssText = 'font-size:11px;padding:3px 10px;';
+    closeAllBtn.appendChild(createCloseIcon());
+    closeAllBtn.appendChild(document.createTextNode(` Close all ${realTabs.length} tabs`));
+    openTabsSectionCount.appendChild(closeAllBtn);
+
+    // Build domain cards from template — no innerHTML
+    openTabsMissionsEl.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (const g of domainGroups) {
+      frag.appendChild(renderDomainCard(g));
+    }
+    openTabsMissionsEl.appendChild(frag);
+
     openTabsSection.style.display = 'block';
   } else if (openTabsSection) {
     openTabsSection.style.display = 'none';
@@ -1293,7 +1418,11 @@ async function renderStaticDashboard() {
 }
 
 async function renderDashboard() {
-  await renderStaticDashboard();
+  try {
+    await renderStaticDashboard();
+  } catch (e) {
+    console.error('[tab-out] Render failed:', e);
+  }
 }
 
 
@@ -1585,20 +1714,28 @@ document.addEventListener('input', async (e) => {
   try {
     const { archived } = await getSavedTabs();
 
+    archiveList.textContent = '';
+
+    let items;
     if (q.length < 2) {
-      // Show all archived items
-      archiveList.innerHTML = archived.map(item => renderArchiveItem(item)).join('');
-      return;
+      items = archived;
+    } else {
+      items = archived.filter(item =>
+        (item.title || '').toLowerCase().includes(q) ||
+        (item.url  || '').toLowerCase().includes(q)
+      );
     }
 
-    // Filter by title or URL containing the query string
-    const results = archived.filter(item =>
-      (item.title || '').toLowerCase().includes(q) ||
-      (item.url  || '').toLowerCase().includes(q)
-    );
-
-    archiveList.innerHTML = results.map(item => renderArchiveItem(item)).join('')
-      || '<div style="font-size:12px;color:var(--muted);padding:8px 0">No results</div>';
+    if (items.length === 0) {
+      const msg = document.createElement('div');
+      msg.style.cssText = 'font-size:12px;color:var(--muted);padding:8px 0';
+      msg.textContent = 'No results';
+      archiveList.appendChild(msg);
+    } else {
+      for (const item of items) {
+        archiveList.appendChild(renderArchiveItem(item));
+      }
+    }
   } catch (err) {
     console.warn('[tab-out] Archive search failed:', err);
   }

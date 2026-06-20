@@ -92,4 +92,4 @@ MIT
 
 ---
 
-Built by [Zara](https://x.com/zarazhangrui)
+*Tab Out was originally created as a [Chrome extension](https://github.com/zarazhangrui/tab-out) by Zara. This Firefox port uses the native `browser.*` API with an event-page background and profiler-driven performance optimizations. All credit for the original concept, design, and visual identity goes to the original author.*
