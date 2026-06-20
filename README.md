@@ -2,21 +2,9 @@
 
 **Keep tabs on your tabs.**
 
-Tab Out is a Chrome extension that replaces your new tab page with a dashboard of everything you have open. Tabs are grouped by domain, with homepages (Gmail, X, LinkedIn, etc.) pulled into their own group. Close tabs with a satisfying swoosh + confetti.
+Tab Out is a Firefox extension that replaces your new tab page with a dashboard of everything you have open. Tabs are grouped by domain, with homepages (Gmail, X, LinkedIn, etc.) pulled into their own group. Close tabs with a satisfying swoosh + confetti.
 
-No server. No account. No external API calls. Just a Chrome extension.
-
----
-
-## Install with a coding agent
-
-Send your coding agent (Claude Code, Codex, etc.) this repo and say **"install this"**:
-
-```
-https://github.com/zarazhangrui/tab-out
-```
-
-The agent will walk you through it. Takes about 1 minute.
+No server. No account. No external API calls. Just a Firefox extension built with `browser.*` API.
 
 ---
 
@@ -28,10 +16,10 @@ The agent will walk you through it. Takes about 1 minute.
 - **Duplicate detection** flags when you have the same page open twice, with one-click cleanup
 - **Click any tab to jump to it** across windows, no new tab opened
 - **Save for later** bookmark tabs to a checklist before closing them
-- **Localhost grouping** shows port numbers next to each tab so you can tell your vibe coding projects apart
+- **Localhost grouping** shows port numbers next to each tab so you can tell your projects apart
 - **Expandable groups** show the first 8 tabs with a clickable "+N more"
 - **100% local** your data never leaves your machine
-- **Pure Chrome extension** no server, no Node.js, no npm, no setup beyond loading the extension
+- **Pure Firefox extension** no server, no Node.js, no npm, no setup beyond loading the extension
 
 ---
 
@@ -43,12 +31,12 @@ The agent will walk you through it. Takes about 1 minute.
 git clone https://github.com/zarazhangrui/tab-out.git
 ```
 
-**2. Load the Chrome extension**
+**2. Load the Firefox extension**
 
-1. Open Chrome and go to `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Navigate to the `extension/` folder inside the cloned repo and select it
+1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
+2. Click **"Load Temporary Add-on…"**
+3. Navigate to the `extension/` folder and select `manifest.json`
+4. Click **Open**
 
 **3. Open a new tab**
 
@@ -67,7 +55,7 @@ You open a new tab
   -> Save tabs for later before closing them
 ```
 
-Everything runs inside the Chrome extension. No external server, no API calls, no data sent anywhere. Saved tabs are stored in `chrome.storage.local`.
+Everything runs inside the Firefox extension. No external server, no API calls, no data sent anywhere. Saved tabs are stored in `browser.storage.local`.
 
 ---
 
@@ -75,10 +63,26 @@ Everything runs inside the Chrome extension. No external server, no API calls, n
 
 | What | How |
 |------|-----|
-| Extension | Chrome Manifest V3 |
-| Storage | chrome.storage.local |
+| Extension | Firefox Manifest V3 (event page background) |
+| API | `browser.*` (Firefox native, not Chrome shim) |
+| Storage | browser.storage.local |
 | Sound | Web Audio API (synthesized, no files) |
-| Animations | CSS transitions + JS confetti particles |
+| Confetti | DOM element pool with `translate3d` GPU compositing |
+| Animations | `requestAnimationFrame` + `will-change` GPU hints |
+
+---
+
+## Performance notes
+
+Tab Out was tuned with Firefox Profiler to eliminate jank during close/confetti animations:
+
+- **Element pool**: 128 pre-allocated confetti DOM elements — no `createElement` during bursts
+- **`visibility: hidden`** instead of `card.remove()` during animation — avoids `nsCSSFrameConstructor::ContentWillBeRemoved` cascade (was causing 250ms style flushes)
+- **Immediate animation**: card hides and confetti fires before `browser.tabs.remove()` — no async delay
+- **Single RAF loop**: all 8 confetti particles updated in one `requestAnimationFrame` call per frame
+- **No CSS transitions on chips**: chip removed instantly, confetti is the visual feedback
+- **No SVG noise filter**: replaced with lightweight CSS gradients (original `feTurbulence` caused full-page CPU repaints)
+- **`will-change` GPU hints**: on mission cards, toast, and confetti particles for compositor-only rendering
 
 ---
 

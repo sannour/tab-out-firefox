@@ -1,26 +1,28 @@
 /* ================================================================
-   Tab Out — Dashboard App (Pure Extension Edition)
+   Tab Out — Dashboard App (Firefox Edition)
 
-   This file is the brain of the dashboard. Now that the dashboard
-   IS the extension page (not inside an iframe), it can call
-   chrome.tabs and chrome.storage directly — no postMessage bridge needed.
+   This file is the brain of the dashboard. Since the dashboard
+   IS the extension's new tab page, it can call browser.tabs and
+   browser.storage directly — no postMessage bridge needed.
+
+   Uses the Firefox-native `browser.*` API throughout.
 
    What this file does:
-   1. Reads open browser tabs directly via chrome.tabs.query()
+   1. Reads open browser tabs directly via browser.tabs.query()
    2. Groups tabs by domain with a landing pages category
    3. Renders domain cards, banners, and stats
    4. Handles all user actions (close tabs, save for later, focus tab)
-   5. Stores "Saved for Later" tabs in chrome.storage.local (no server)
+   5. Stores "Saved for Later" tabs in browser.storage.local (no server)
    ================================================================ */
 
 'use strict';
 
 
 /* ----------------------------------------------------------------
-   CHROME TABS — Direct API Access
+   BROWSER TABS — Direct API Access
 
    Since this page IS the extension's new tab page, it has full
-   access to chrome.tabs and chrome.storage. No middleman needed.
+   access to browser.tabs and browser.storage. No middleman needed.
    ---------------------------------------------------------------- */
 
 // All open tabs — populated by fetchOpenTabs()
@@ -29,16 +31,15 @@ let openTabs = [];
 /**
  * fetchOpenTabs()
  *
- * Reads all currently open browser tabs directly from Chrome.
- * Sets the extensionId flag so we can identify Tab Out's own pages.
+ * Reads all currently open browser tabs directly from Firefox.
+ * Uses browser.runtime.getURL() to detect Tab Out's own pages
+ * (which will be moz-extension://... URLs in Firefox).
  */
 async function fetchOpenTabs() {
   try {
-    const extensionId = chrome.runtime.id;
-    // The new URL for this page is now index.html (not newtab.html)
-    const newtabUrl = `chrome-extension://${extensionId}/index.html`;
+    const newtabUrl = browser.runtime.getURL('index.html');
 
-    const tabs = await chrome.tabs.query({});
+    const tabs = await browser.tabs.query({});
     openTabs = tabs.map(t => ({
       id:       t.id,
       url:      t.url,
@@ -46,10 +47,10 @@ async function fetchOpenTabs() {
       windowId: t.windowId,
       active:   t.active,
       // Flag Tab Out's own pages so we can detect duplicate new tabs
-      isTabOut: t.url === newtabUrl || t.url === 'chrome://newtab/',
+      isTabOut: t.url === newtabUrl || t.url === 'about:newtab',
     }));
   } catch {
-    // chrome.tabs API unavailable (shouldn't happen in an extension page)
+    // browser.tabs API unavailable (shouldn't happen in an extension page)
     openTabs = [];
   }
 }
@@ -78,7 +79,7 @@ async function closeTabsByUrls(urls) {
     }
   }
 
-  const allTabs = await chrome.tabs.query({});
+  const allTabs = await browser.tabs.query({});
   const toClose = allTabs
     .filter(tab => {
       const tabUrl = tab.url || '';
@@ -90,7 +91,7 @@ async function closeTabsByUrls(urls) {
     })
     .map(tab => tab.id);
 
-  if (toClose.length > 0) await chrome.tabs.remove(toClose);
+  if (toClose.length > 0) await browser.tabs.remove(toClose);
   await fetchOpenTabs();
 }
 
@@ -103,22 +104,22 @@ async function closeTabsByUrls(urls) {
 async function closeTabsExact(urls) {
   if (!urls || urls.length === 0) return;
   const urlSet = new Set(urls);
-  const allTabs = await chrome.tabs.query({});
+  const allTabs = await browser.tabs.query({});
   const toClose = allTabs.filter(t => urlSet.has(t.url)).map(t => t.id);
-  if (toClose.length > 0) await chrome.tabs.remove(toClose);
+  if (toClose.length > 0) await browser.tabs.remove(toClose);
   await fetchOpenTabs();
 }
 
 /**
  * focusTab(url)
  *
- * Switches Chrome to the tab with the given URL (exact match first,
+ * Switches Firefox to the tab with the given URL (exact match first,
  * then hostname fallback). Also brings the window to the front.
  */
 async function focusTab(url) {
   if (!url) return;
-  const allTabs = await chrome.tabs.query({});
-  const currentWindow = await chrome.windows.getCurrent();
+  const allTabs = await browser.tabs.query({});
+  const currentWindow = await browser.windows.getCurrent();
 
   // Try exact URL match first
   let matches = allTabs.filter(t => t.url === url);
@@ -138,8 +139,8 @@ async function focusTab(url) {
 
   // Prefer a match in a different window so it actually switches windows
   const match = matches.find(t => t.windowId !== currentWindow.id) || matches[0];
-  await chrome.tabs.update(match.id, { active: true });
-  await chrome.windows.update(match.windowId, { focused: true });
+  await browser.tabs.update(match.id, { active: true });
+  await browser.windows.update(match.windowId, { focused: true });
 }
 
 /**
@@ -150,7 +151,7 @@ async function focusTab(url) {
  * keepOne=false → close all copies.
  */
 async function closeDuplicateTabs(urls, keepOne = true) {
-  const allTabs = await chrome.tabs.query({});
+  const allTabs = await browser.tabs.query({});
   const toClose = [];
 
   for (const url of urls) {
@@ -165,7 +166,7 @@ async function closeDuplicateTabs(urls, keepOne = true) {
     }
   }
 
-  if (toClose.length > 0) await chrome.tabs.remove(toClose);
+  if (toClose.length > 0) await browser.tabs.remove(toClose);
   await fetchOpenTabs();
 }
 
@@ -175,13 +176,12 @@ async function closeDuplicateTabs(urls, keepOne = true) {
  * Closes all duplicate Tab Out new-tab pages except the current one.
  */
 async function closeTabOutDupes() {
-  const extensionId = chrome.runtime.id;
-  const newtabUrl = `chrome-extension://${extensionId}/index.html`;
+  const newtabUrl = browser.runtime.getURL('index.html');
 
-  const allTabs = await chrome.tabs.query({});
-  const currentWindow = await chrome.windows.getCurrent();
+  const allTabs = await browser.tabs.query({});
+  const currentWindow = await browser.windows.getCurrent();
   const tabOutTabs = allTabs.filter(t =>
-    t.url === newtabUrl || t.url === 'chrome://newtab/'
+    t.url === newtabUrl || t.url === 'about:newtab'
   );
 
   if (tabOutTabs.length <= 1) return;
@@ -193,17 +193,16 @@ async function closeTabOutDupes() {
     tabOutTabs.find(t => t.active) ||
     tabOutTabs[0];
   const toClose = tabOutTabs.filter(t => t.id !== keep.id).map(t => t.id);
-  if (toClose.length > 0) await chrome.tabs.remove(toClose);
+  if (toClose.length > 0) await browser.tabs.remove(toClose);
   await fetchOpenTabs();
 }
 
 
 /* ----------------------------------------------------------------
-   SAVED FOR LATER — chrome.storage.local
+   SAVED FOR LATER — browser.storage.local
 
-   Replaces the old server-side SQLite + REST API with Chrome's
-   built-in key-value storage. Data persists across browser sessions
-   and doesn't require a running server.
+   Uses Firefox's built-in key-value storage. Data persists across
+   browser sessions and doesn't require a running server.
 
    Data shape stored under the "deferred" key:
    [
@@ -222,11 +221,11 @@ async function closeTabOutDupes() {
 /**
  * saveTabForLater(tab)
  *
- * Saves a single tab to the "Saved for Later" list in chrome.storage.local.
+ * Saves a single tab to the "Saved for Later" list in browser.storage.local.
  * @param {{ url: string, title: string }} tab
  */
 async function saveTabForLater(tab) {
-  const { deferred = [] } = await chrome.storage.local.get('deferred');
+  const { deferred = [] } = await browser.storage.local.get('deferred');
   deferred.push({
     id:        Date.now().toString(),
     url:       tab.url,
@@ -235,18 +234,18 @@ async function saveTabForLater(tab) {
     completed: false,
     dismissed: false,
   });
-  await chrome.storage.local.set({ deferred });
+  await browser.storage.local.set({ deferred });
 }
 
 /**
  * getSavedTabs()
  *
- * Returns all saved tabs from chrome.storage.local.
+ * Returns all saved tabs from browser.storage.local.
  * Filters out dismissed items (those are gone for good).
  * Splits into active (not completed) and archived (completed).
  */
 async function getSavedTabs() {
-  const { deferred = [] } = await chrome.storage.local.get('deferred');
+  const { deferred = [] } = await browser.storage.local.get('deferred');
   const visible = deferred.filter(t => !t.dismissed);
   return {
     active:   visible.filter(t => !t.completed),
@@ -260,12 +259,12 @@ async function getSavedTabs() {
  * Marks a saved tab as completed (checked off). It moves to the archive.
  */
 async function checkOffSavedTab(id) {
-  const { deferred = [] } = await chrome.storage.local.get('deferred');
+  const { deferred = [] } = await browser.storage.local.get('deferred');
   const tab = deferred.find(t => t.id === id);
   if (tab) {
     tab.completed = true;
     tab.completedAt = new Date().toISOString();
-    await chrome.storage.local.set({ deferred });
+    await browser.storage.local.set({ deferred });
   }
 }
 
@@ -275,11 +274,11 @@ async function checkOffSavedTab(id) {
  * Marks a saved tab as dismissed (removed from all lists).
  */
 async function dismissSavedTab(id) {
-  const { deferred = [] } = await chrome.storage.local.get('deferred');
+  const { deferred = [] } = await browser.storage.local.get('deferred');
   const tab = deferred.find(t => t.id === id);
   if (tab) {
     tab.dismissed = true;
-    await chrome.storage.local.set({ deferred });
+    await browser.storage.local.set({ deferred });
   }
 }
 
@@ -294,21 +293,31 @@ async function dismissSavedTab(id) {
  * Plays a clean "swoosh" sound when tabs are closed.
  * Built entirely with the Web Audio API — no sound files needed.
  * A filtered noise sweep that descends in pitch, like air moving.
+ *
+ * Note: The first call creates and primes the AudioContext (Firefox
+ * autoplay policy), so the very first close may be silent. All
+ * subsequent closes play sound normally.
  */
+let swooshCtx = null;
+
 function playCloseSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const t = ctx.currentTime;
+    if (!swooshCtx) {
+      swooshCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
-    // Swoosh: shaped white noise through a sweeping bandpass filter
+    if (swooshCtx.state === 'suspended') {
+      swooshCtx.resume();
+    }
+
+    const ctx = swooshCtx;
+    const t = ctx.currentTime + 0.02;
     const duration = 0.25;
     const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
     const data = buffer.getChannelData(0);
 
-    // Generate noise with a natural envelope (quick attack, smooth decay)
     for (let i = 0; i < data.length; i++) {
       const pos = i / data.length;
-      // Envelope: ramps up fast in first 10%, then fades out smoothly
       const env = pos < 0.1 ? pos / 0.1 : Math.pow(1 - (pos - 0.1) / 0.9, 1.5);
       data[i] = (Math.random() * 2 - 1) * env;
     }
@@ -316,22 +325,18 @@ function playCloseSound() {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
 
-    // Bandpass filter sweeps from high to low — creates the "swoosh" character
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.Q.value = 2.0;
     filter.frequency.setValueAtTime(4000, t);
     filter.frequency.exponentialRampToValueAtTime(400, t + duration);
 
-    // Volume
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.15, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
 
     source.connect(filter).connect(gain).connect(ctx.destination);
     source.start(t);
-
-    setTimeout(() => ctx.close(), 500);
   } catch {
     // Audio not supported — fail silently
   }
@@ -344,90 +349,209 @@ function playCloseSound() {
  * coordinates (typically the center of a card being closed).
  * Pure CSS + JS, no libraries.
  */
-function shootConfetti(x, y) {
-  const colors = [
-    '#c8713a', // amber
-    '#e8a070', // amber light
-    '#5a7a62', // sage
-    '#8aaa92', // sage light
-    '#5a6b7a', // slate
-    '#8a9baa', // slate light
-    '#d4b896', // warm paper
-    '#b35a5a', // rose
-  ];
+/* ----------------------------------------------------------------
+   CONFETTI ELEMENT POOL
 
-  const particleCount = 17;
+   Pre-allocates confetti DOM elements so bursts don't pay the cost
+   of createElement + appendChild. Idle elements sit in a hidden
+   container with display: none. On burst, they're pulled out,
+   positioned, and animated. After animation, they're reset and
+   returned to the pool.
+   ---------------------------------------------------------------- */
 
-  for (let i = 0; i < particleCount; i++) {
+const CONFETTI_COLORS = [
+  '#c8713a', // amber
+  '#e8a070', // amber light
+  '#5a7a62', // sage
+  '#8aaa92', // sage light
+  '#5a6b7a', // slate
+  '#8a9baa', // slate light
+  '#d4b896', // warm paper
+  '#b35a5a', // rose
+];
+
+const CONFETTI_PARTICLE_COUNT = 8;
+const CONFETTI_POOL_SIZE = 128;
+
+// Pool of pre-created confetti DOM elements
+let confettiPool = null;
+
+// Hidden container that holds pool elements when not in use
+let confettiPoolContainer = null;
+
+/**
+ * ensureConfettiPool()
+ *
+ * Lazy-initializes the confetti element pool. Called on first burst.
+ * Creates all elements once and stores them in a hidden container.
+ */
+function ensureConfettiPool() {
+  if (confettiPool) return;
+
+  confettiPool = [];
+
+  // Hidden container — keeps pooled elements out of layout
+  confettiPoolContainer = document.createElement('div');
+  confettiPoolContainer.style.cssText = 'display:none;position:fixed;left:-9999px;top:-9999px;';
+  document.body.appendChild(confettiPoolContainer);
+
+  // Pre-compute the base styles that all confetti particles share
+  const baseStyle = [
+    'position: fixed',
+    'pointer-events: none',
+    'z-index: 9999',
+    'will-change: transform, opacity',
+    'transform: translateZ(0)',
+    'opacity: 1',
+  ].join(';');
+
+  for (let i = 0; i < CONFETTI_POOL_SIZE; i++) {
     const el = document.createElement('div');
+    el.style.cssText = baseStyle;
+    confettiPoolContainer.appendChild(el);
+    confettiPool.push(el);
+  }
+}
 
+/**
+ * acquireConfettiParticles(x, y)
+ *
+ * Takes CONFETTI_PARTICLE_COUNT elements from the pool, positions them
+ * at (x, y) with random sizes/colors/shapes, appends them to body,
+ * and returns particle state objects for animation.
+ */
+function acquireConfettiParticles(x, y) {
+  ensureConfettiPool();
+
+  const particles = [];
+  const count = Math.min(CONFETTI_PARTICLE_COUNT, confettiPool.length);
+
+  // Batch: grab all elements first, then append in one go
+  const fragment = document.createDocumentFragment();
+
+  for (let i = 0; i < count; i++) {
+    const el = confettiPool.pop();
+
+    const size = 5 + Math.random() * 6;
+    const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
     const isCircle = Math.random() > 0.5;
-    const size = 5 + Math.random() * 6; // 5–11px
-    const color = colors[Math.floor(Math.random() * colors.length)];
 
-    el.style.cssText = `
-      position: fixed;
-      left: ${x}px;
-      top: ${y}px;
-      width: ${size}px;
-      height: ${size}px;
-      background: ${color};
-      border-radius: ${isCircle ? '50%' : '2px'};
-      pointer-events: none;
-      z-index: 9999;
-      transform: translate(-50%, -50%);
-      opacity: 1;
-    `;
-    document.body.appendChild(el);
+    // Only override per-burst styles — base styles are already set
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.background = color;
+    el.style.borderRadius = isCircle ? '50%' : '2px';
+    el.style.transform = 'translateZ(0)';
+    el.style.opacity = '1';
 
-    // Physics: random angle and speed for the outward burst
-    const angle   = Math.random() * Math.PI * 2;
-    const speed   = 60 + Math.random() * 120;
-    const vx      = Math.cos(angle) * speed;
-    const vy      = Math.sin(angle) * speed - 80; // bias upward
-    const gravity = 200;
+    fragment.appendChild(el);
+
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 120;
+
+    particles.push({
+      el,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 80,
+      rotateSpeed: isCircle ? 0 : 100 + Math.random() * 200,
+      rotation: 0,
+    });
+  }
+
+  // Single append — one layout operation
+  document.body.appendChild(fragment);
+
+  return particles;
+}
+
+/**
+ * releaseConfettiParticles(particles)
+ *
+ * Resets and returns confetti elements to the hidden pool container.
+ */
+function releaseConfettiParticles(particles) {
+  for (const p of particles) {
+    p.el.remove();
+    p.el.style.transform = 'translateZ(0)';
+    p.el.style.opacity = '1';
+    confettiPool.push(p.el);
+  }
+}
+
+/**
+ * shootConfetti(x, y)
+ *
+ * Shoots a burst of confetti particles from the given coordinates.
+ * Returns a Promise that resolves when the confetti animation finishes.
+ * Uses the element pool — no createElement/appendChild during bursts.
+ */
+function shootConfetti(x, y) {
+  return new Promise((resolve) => {
+    // Acquire particles from pre-allocated pool (no DOM creation)
+    const particles = acquireConfettiParticles(x, y);
 
     const startTime = performance.now();
-    const duration  = 700 + Math.random() * 200; // 700–900ms
+    const duration = 700 + Math.random() * 200; // 700–900ms
+    const gravity = 600;
 
     function frame(now) {
-      const elapsed  = (now - startTime) / 1000;
+      const elapsed = (now - startTime) / 1000;
       const progress = elapsed / (duration / 1000);
 
-      if (progress >= 1) { el.remove(); return; }
+      if (progress >= 1) {
+        releaseConfettiParticles(particles);
+        resolve();
+        return;
+      }
 
-      const px = vx * elapsed;
-      const py = vy * elapsed + 0.5 * gravity * elapsed * elapsed;
       const opacity = progress < 0.5 ? 1 : 1 - (progress - 0.5) * 2;
-      const rotate  = elapsed * 200 * (isCircle ? 0 : 1);
 
-      el.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px)) rotate(${rotate}deg)`;
-      el.style.opacity = opacity;
+      for (const p of particles) {
+        const px = p.vx * elapsed;
+        const py = p.vy * elapsed + 0.5 * gravity * elapsed * elapsed;
+        p.rotation += p.rotateSpeed * elapsed;
+
+        p.el.style.transform = `translate3d(${px}px, ${py}px, 0) rotate(${p.rotation}deg)`;
+        p.el.style.opacity = opacity;
+      }
 
       requestAnimationFrame(frame);
     }
 
     requestAnimationFrame(frame);
-  }
+  });
 }
 
 /**
  * animateCardOut(card)
  *
- * Smoothly removes a mission card: fade + scale down, then confetti.
- * After the animation, checks if the grid is now empty.
+ * Immediately removes the card from the DOM, but keeps a zero-size
+ * placeholder in its place so CSS columns don't reflow the remaining
+ * cards during the confetti animation. After confetti finishes, the
+ * placeholder is removed and columns reflow once.
  */
-function animateCardOut(card) {
+async function animateCardOut(card) {
   if (!card) return;
 
+  // Save dimensions BEFORE any DOM changes
   const rect = card.getBoundingClientRect();
-  shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
 
-  card.classList.add('closing');
-  setTimeout(() => {
-    card.remove();
-    checkAndShowEmptyState();
-  }, 300);
+  // Keep the card in the DOM with visibility: hidden — this preserves its
+  // layout space in CSS columns AND avoids triggering ContentWillBeRemoved
+  // (which would cause a 200-300ms style flush during the animation).
+  // The card is visually gone but its space stays occupied.
+  card.style.visibility = 'hidden';
+  card.style.pointerEvents = 'none';
+
+  // Start confetti and wait for it to finish
+  await shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+  // Confetti is done — now safe to remove from DOM (triggers style flush,
+  // but no animation running to compete with it)
+  card.remove();
+  checkAndShowEmptyState();
 }
 
 /**
@@ -714,22 +838,22 @@ let domainGroups = [];
    ---------------------------------------------------------------- */
 
 /**
- * getRealTabs()
+ * isInternalUrl(url)
  *
- * Returns tabs that are real web pages — no chrome://, extension
- * pages, about:blank, etc.
+ * Returns true if the URL is a browser-internal page that should be
+ * excluded from the tab dashboard.
  */
+function isInternalUrl(url) {
+  if (!url) return true;
+  const internalSchemes = [
+    'about:',
+    'moz-extension://',
+  ];
+  return internalSchemes.some(s => url.startsWith(s));
+}
+
 function getRealTabs() {
-  return openTabs.filter(t => {
-    const url = t.url || '';
-    return (
-      !url.startsWith('chrome://') &&
-      !url.startsWith('chrome-extension://') &&
-      !url.startsWith('about:') &&
-      !url.startsWith('edge://') &&
-      !url.startsWith('brave://')
-    );
-  });
+  return openTabs.filter(t => !isInternalUrl(t.url));
 }
 
 /**
@@ -904,7 +1028,7 @@ function renderDomainCard(group) {
 /**
  * renderDeferredColumn()
  *
- * Reads saved tabs from chrome.storage.local and renders the right-side
+ * Reads saved tabs from browser.storage.local and renders the right-side
  * "Saved for Later" checklist column. Shows active items as a checklist
  * and completed items in a collapsible archive.
  */
@@ -1013,7 +1137,7 @@ function renderArchiveItem(item) {
  *
  * The main render function:
  * 1. Paints greeting + date
- * 2. Fetches open tabs via chrome.tabs.query()
+ * 2. Fetches open tabs via browser.tabs.query()
  * 3. Groups tabs by domain (with landing pages pulled out to their own group)
  * 4. Renders domain cards
  * 5. Updates footer stats
@@ -1227,34 +1351,42 @@ document.addEventListener('click', async (e) => {
     const tabUrl = actionEl.dataset.tabUrl;
     if (!tabUrl) return;
 
-    // Close the tab in Chrome directly
-    const allTabs = await chrome.tabs.query({});
-    const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
-    await fetchOpenTabs();
-
     playCloseSound();
 
-    // Animate the chip row out
+    // Grab chip reference IMMEDIATELY — before any async operations
     const chip = actionEl.closest('.page-chip');
-    if (chip) {
-      const rect = chip.getBoundingClientRect();
-      shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      chip.style.transition = 'opacity 0.2s, transform 0.2s';
-      chip.style.opacity    = '0';
-      chip.style.transform  = 'scale(0.8)';
-      setTimeout(() => {
-        chip.remove();
-        // If the card now has no tabs, remove it too
-        const parentCard = document.querySelector('.mission-card:has(.mission-pages:empty)');
-        if (parentCard) animateCardOut(parentCard);
-        document.querySelectorAll('.mission-card').forEach(c => {
-          if (c.querySelectorAll('.page-chip[data-action="focus-tab"]').length === 0) {
-            animateCardOut(c);
-          }
-        });
-      }, 200);
+    if (!chip) return;
+
+    const card = chip.closest('.mission-card');
+    const wasLastChip = card ? card.querySelectorAll('.page-chip[data-action="focus-tab"]').length === 1 : false;
+    const rect = chip.getBoundingClientRect();
+
+    // Remove chip immediately — instant visual feedback
+    chip.remove();
+
+    // If this was the last chip, hide the card instead of removing it
+    if (wasLastChip && card) {
+      card.style.visibility = 'hidden';
+      card.style.pointerEvents = 'none';
     }
+
+    // Close the tab in parallel with confetti
+    const closePromise = browser.tabs.query({}).then(allTabs => {
+      const match = allTabs.find(t => t.url === tabUrl);
+      if (match) return browser.tabs.remove(match.id);
+    }).then(() => fetchOpenTabs()).catch(() => {});
+
+    // Fire confetti
+    await shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+    // Confetti done — now safe to remove card from DOM
+    if (wasLastChip && card) {
+      card.remove();
+      checkAndShowEmptyState();
+    }
+
+    // Wait for tab closure too
+    await closePromise;
 
     // Update footer
     const statTabs = document.getElementById('statTabs');
@@ -1271,7 +1403,7 @@ document.addEventListener('click', async (e) => {
     const tabTitle = actionEl.dataset.tabTitle || tabUrl;
     if (!tabUrl) return;
 
-    // Save to chrome.storage.local
+    // Save to browser.storage.local
     try {
       await saveTabForLater({ url: tabUrl, title: tabTitle });
     } catch (err) {
@@ -1280,20 +1412,15 @@ document.addEventListener('click', async (e) => {
       return;
     }
 
-    // Close the tab in Chrome
-    const allTabs = await chrome.tabs.query({});
+    // Close the tab in Firefox
+    const allTabs = await browser.tabs.query({});
     const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
+    if (match) await browser.tabs.remove(match.id);
     await fetchOpenTabs();
 
-    // Animate chip out
+    // Remove chip immediately — no CSS transition, no layout reflow
     const chip = actionEl.closest('.page-chip');
-    if (chip) {
-      chip.style.transition = 'opacity 0.2s, transform 0.2s';
-      chip.style.opacity    = '0';
-      chip.style.transform  = 'scale(0.8)';
-      setTimeout(() => chip.remove(), 200);
-    }
+    if (chip) chip.remove();
 
     showToast('Saved for later');
     await renderDeferredColumn();
@@ -1349,30 +1476,29 @@ document.addEventListener('click', async (e) => {
     if (!group) return;
 
     const urls      = group.tabs.map(t => t.url);
-    // Landing pages and custom groups (whose domain key isn't a real hostname)
-    // must use exact URL matching to avoid closing unrelated tabs
-    const useExact  = group.domain === '__landing-pages__' || !!group.label;
+    const groupLabel = group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
 
-    if (useExact) {
-      await closeTabsExact(urls);
-    } else {
-      await closeTabsByUrls(urls);
-    }
-
+    // Start animation IMMEDIATELY
     if (card) {
       playCloseSound();
-      animateCardOut(card);
     }
+    const animPromise = card ? animateCardOut(card) : Promise.resolve();
 
-    // Remove from in-memory groups
+    // Remove from in-memory groups immediately
     const idx = domainGroups.indexOf(group);
     if (idx !== -1) domainGroups.splice(idx, 1);
 
-    const groupLabel = group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
-    showToast(`Closed ${urls.length} tab${urls.length !== 1 ? 's' : ''} from ${groupLabel}`);
+    // Start tab closure in parallel with animation
+    const useExact = group.domain === '__landing-pages__' || !!group.label;
+    const closePromise = useExact ? closeTabsExact(urls) : closeTabsByUrls(urls);
+
+    // Wait for both animation and tab closure before showing toast
+    await Promise.all([animPromise, closePromise]);
 
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = openTabs.length;
+
+    showToast(`Closed ${urls.length} tab${urls.length !== 1 ? 's' : ''} from ${groupLabel}`);
     return;
   }
 
@@ -1415,18 +1541,21 @@ document.addEventListener('click', async (e) => {
   // ---- Close ALL open tabs ----
   if (action === 'close-all-open-tabs') {
     const allUrls = openTabs
-      .filter(t => t.url && !t.url.startsWith('chrome') && !t.url.startsWith('about:'))
+      .filter(t => t.url && !t.url.startsWith('about:') && !t.url.startsWith('moz-extension://'))
       .map(t => t.url);
-    await closeTabsByUrls(allUrls);
-    playCloseSound();
 
+    // Start all card animations IMMEDIATELY
+    playCloseSound();
+    const animPromises = [];
     document.querySelectorAll('#openTabsMissions .mission-card').forEach(c => {
-      shootConfetti(
-        c.getBoundingClientRect().left + c.offsetWidth / 2,
-        c.getBoundingClientRect().top  + c.offsetHeight / 2
-      );
-      animateCardOut(c);
+      animPromises.push(animateCardOut(c));
     });
+
+    // Close tabs in parallel with animation
+    const closePromise = closeTabsByUrls(allUrls);
+
+    // Wait for both animation and tab closure before showing toast
+    await Promise.all([...animPromises, closePromise]);
 
     showToast('All tabs closed. Fresh start.');
     return;
