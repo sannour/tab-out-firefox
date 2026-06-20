@@ -19,6 +19,45 @@
 
 
 /* ----------------------------------------------------------------
+   THEME — dark/light toggle, persisted in browser.storage.local
+   ---------------------------------------------------------------- */
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const label = document.getElementById('themeLabel');
+  if (label) label.textContent = theme === 'dark' ? 'Light' : 'Dark';
+  // Toggle which icon is visible
+  document.querySelectorAll('.theme-icon').forEach(el => el.style.display = 'none');
+  const showIcon = document.querySelector(`.theme-icon-${theme === 'dark' ? 'light' : 'dark'}`);
+  if (showIcon) showIcon.style.display = '';
+}
+
+async function loadTheme() {
+  try {
+    const { theme } = await browser.storage.local.get('theme');
+    applyTheme(theme || 'dark');
+  } catch {
+    applyTheme('dark');
+  }
+}
+
+async function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { await browser.storage.local.set({ theme: next }); } catch {}
+}
+
+// Load persisted theme (async — updates after first render)
+loadTheme();
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.addEventListener('click', toggleTheme);
+});
+
+
+/* ----------------------------------------------------------------
    BROWSER TABS — Direct API Access
 
    Since this page IS the extension's new tab page, it has full
